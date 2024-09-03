@@ -1,0 +1,75 @@
+@startuml lakum
+!pragma teoz true
+!theme aws-orange
+skinparam defaultFontName JetBrains Mono
+skinparam backgroundColor white
+
+actor "Patient" as user
+boundary "Frontend" as fe
+control "Middleware" as api
+boundary "E Pharmacy \nBackend" as m2
+control "E Services \nMiddleware" as downstream
+
+== LAKUM Burn ==
+user -> fe: Input Lakum amount to be spent
+fe -> api: **PUT:** /api/V1/cart/loyalty \n{"program": "LAKUM","amount": 100}
+api -> m2: **POST:** /V1/alhabib/carts/mine/loyalty/ \n{"amount": 100}
+{burn} m2 -> downstream: **POST:** api/customer/lakum_burn \n{"accountNumber": 2022000009,\n"amount": 20,\n"quoteId": "23sd4234adtg1"}
+alt#gold Success
+  {burnEnd} downstream -> m2: Success
+  m2 -> api: Returns Updated Shopping Cart
+  api -> fe: Returns Updated Shopping Cart
+  fe ->o user: Sees updated Shipping Cart \nabout Lakum totals
+  else #pink Failed
+  {burnEnd} downstream -> m2: Failed
+  m2 -> api: { message }
+  api -> fe: { message }
+  fe ->o user: Lokalized failed message
+end
+
+{burn} <-> {burnEnd} : SLA > 200ms
+
+== Lakum Cancelation == 
+user -> fe: Remove added Lakum amount from Shopping Cart
+fe -> api: **POST:** /api/V1/cart/loyalty/delete
+api -> m2: **POST:** /V1/alhabib/carts/mine/loyalty/delete
+{cancelation} m2 -> downstream: **POST:** Cancel added Lakum amount
+alt#gold Success
+  {cancelationEnd} downstream -> m2: Successfully Canceled
+  m2 -> api: Returns Updated Shopping Cart
+  api -> fe: Returns Updated Shopping Cart
+  fe ->o user: Sees updated Shipping Cart \nThere is no Lakum
+  else #pink Failed
+  {cancelationEnd} downstream -> m2: Cancelation Failed
+  m2 -> api: { message }
+  api -> fe: { message }
+  fe ->o user: Lokalized failed message
+end
+
+{cancelation} <-> {cancelationEnd} : SLA > 200ms
+
+== Lakum Transaction History == 
+user -> fe: Enters to Lakum Wallet page
+fe -> api: **GET:** ​/api​/V1​/customer/lakum/history
+api -> m2: **GET:** ​/api​/V1​/customer/lakum/history
+{trx} m2 -> downstream: **GET:** /api/customer/lakum_transaction_history \nParams: LakumAccountNo & isDetailRequired
+alt#gold #LightBlue Transaction History Found
+  {trxEnd} downstream -> m2: Transaction history
+  m2 -> api: Transaction history
+  api -> fe: Transaction history
+  fe ->o user: Sees transaction history
+  else #orange No transaction Record
+  {trxEnd} downstream -> m2: { message }
+  m2 -> api: { message }
+  api -> fe: { message }
+  fe ->o user: { message }
+  else #pink There is No Lakum account
+  {trxEnd} downstream -> m2: { message }
+  m2 -> api: { message }
+  api -> fe: { message }
+  fe ->o user: { message }
+end
+
+{trx} <-> {trxEnd} : SLA > 200ms
+
+@enduml

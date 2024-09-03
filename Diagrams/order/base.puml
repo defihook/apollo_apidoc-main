@@ -1,0 +1,62 @@
+@startuml base
+!pragma teoz true
+!theme aws-orange
+skinparam defaultFontName JetBrains Mono
+skinparam backgroundColor white
+
+actor "End User" as user
+database "E Pharmacy DB" as db
+boundary "E Pharmacy \nBackend" as m2
+control "E Services \nMiddleware" as downstream
+
+== Create order to Downstream ==
+{createOrder} m2 -> downstream: **POST: **api/order/create_order
+alt#Pink Failed
+{createOrderEnds} downstream -> m2: { status, message }
+m2 <-> db: Downstream request & response saved
+  loop#LightCyan Retry
+    m2 <-> downstream: Order creation retry
+  end
+else #LightBlue Success
+downstream -> m2: { data }
+m2 <-> db: Update Order
+m2 <-> db: Downstream request & response saved
+end
+{createOrder} <-> {createOrderEnds}: SLA >550ms
+
+== Cancel order to Downstream ==
+{cancelOrder} m2 -> downstream: **POST: **api/order/cancel/{orderId}
+alt#Pink Failed
+{cancelOrderEnds} downstream -> m2: { status, message }
+m2 <-> db: Downstream request & response saved
+  loop#LightCyan Retry
+    m2 <-> downstream: Order Cancelation
+  end
+else #LightBlue Success
+downstream -> m2: { data }
+m2 <-> db: Update Order
+m2 <-> db: Downstream request & response saved
+m2 ->o user: Notification
+end
+
+{cancelOrder} <-> {cancelOrderEnds}: SLA >550ms
+
+== Get any invoice from downstream ==
+{invoiceOrder} m2 -> downstream: **POST:** api/order/{VIDASalesOrderId}/invoice?invoiceType={invoiceTypeString}
+alt#Pink Failed
+{invoiceOrderEnds} downstream -> m2: { status, message }
+m2 <-> db: Downstream request & response saved
+  loop#LightCyan Retry
+    m2 <-> downstream: Order Invoice
+  end
+else #LightBlue Success
+downstream -> m2: { invoicePDF }
+m2 <-> db: Update Order
+m2 <-> db: Downstream request & response saved
+m2 -> user: Notification
+end
+m2 <-> db: Downstream request & response saved
+
+{invoiceOrder} <-> {invoiceOrderEnds}: SLA >550ms
+
+@enduml

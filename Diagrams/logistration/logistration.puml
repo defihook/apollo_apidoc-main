@@ -1,0 +1,86 @@
+@startuml logistration
+!pragma teoz true
+!theme aws-orange
+skinparam defaultFontName JetBrains Mono
+skinparam backgroundColor white
+
+actor "Patient" as user
+boundary "Frontend" as fe
+control "Middleware" as api
+boundary "E Pharmacy \nBackend" as m2
+database "E Pharmacy DB" as db
+control "E Services \nMiddleware" as downstream
+
+== Login or Register ==
+user -> fe: Login with Phone input
+fe -> api: **POST:** /customer/login \n{"phone": {"zip_code": "+90",\n\t"number": "5368798202"}}
+api -> m2: **POST:** /V1/alhabib/customers/login \n{"phone": {"zip_code": "+90",\n\t"number": "5368798202"}}
+alt#Gold #LightBlue Success
+  m2 -> user: Send OTP code
+  m2 -> api: { otp_id }
+  api -> fe: { otp_id }
+  fe ->o user: User lands to OTP approval screen
+else #white Failure Fallback (Is Patient Exist Controller)
+  {exist} m2 -> downstream: **POST: **/api/customer/is_patient_exists \n{ phone }
+  {existEnd} downstream -> m2: { status: true}
+  m2 ->o user: Send OTP code
+  m2 -> api: { otp_id }
+  api -> fe: { otp_id }
+  fe ->o user: User lands to OTP approval screen
+  m2 ->o db: Flag User
+  alt#gold New User created with the phone number
+    m2 ->o user: Send OTP code
+    m2 -> api: { otp_id }
+    api -> fe: { otp_id }
+    fe ->o user: User lands to OTP approval screen
+  end
+end
+
+== Verify OTP ==
+user -> fe: OTP code input
+fe -> api: **POST:** /api/V1/customer/verify_otp \n{"otp_id": 11,"otp_code": "string"}
+api -> m2: **POST:** /V1/alhabib/customer/otp/check \n{"otp_id": 11,"otp_code": "string"}
+alt#gold #Pink Failed
+  m2 -> api: { message }
+  api -> fe: { message }
+  fe ->o user: { message }
+else #lightblue Success
+  m2 -> api: { Customer Object }
+  api -> fe: { Customer Object }
+
+  alt#gold #white New Customer
+    fe ->o user: User lands to registration info screen
+  else #LightGray Exist Customer
+    fe ->o user: User lands to Homepage
+  end
+end
+
+
+== HMG Login ==
+user -> fe: Login with National ID
+fe -> api: **POST: **/customer/hmg_login \n{"phone": {"zip_code": "+90",\n\t"number": "5368798202"},\n"national_id": "16898166021"}
+api -> m2: **POST: **/V1/alhabib/customers/external-login \n{"phone": {"zip_code": "+90",\n\t"number": "5368798202"},\n"national_id": "16898166021"}
+m2 -> db: Get User with National ID and Phone
+alt#pink Failed to find the User at E Pharmacy
+  db -> m2: Failed to find the User
+ {getUser} m2 -> downstream: **POST: **/api/customer/login \n{ type: "nationalId", \nvalue: "16898166021", \nphone: "5368798202"}
+  alt#gold #lightblue Success: User found
+   {getUserEnd} downstream -> m2: Returns user object
+    
+    m2 -> db: Saves the user
+  else #pink Failed to find the User at HMG
+    downstream -> m2: Returns "No user found"
+    m2 -> api: Failed to find user
+    api -> fe: Failed to find user
+    fe ->o user: Failed to find user with given informations.\nPlease retry with correct informations.
+  end
+end
+db -> m2: User Created or Found
+m2 -> api: Sends OTP and Returns OTP Id
+api -> fe: Success and OTP Id
+fe ->o user: Lands to OTP Input Page
+
+{exist} <-> {existEnd} : SLA > 200ms
+{getUser} <-> {getUserEnd} : SLA > 200ms
+
+@enduml

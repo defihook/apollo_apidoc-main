@@ -1,0 +1,58 @@
+@startuml payfort
+!pragma teoz true
+!theme aws-orange
+skinparam defaultFontName JetBrains Mono
+skinparam backgroundColor white
+
+actor "End User" as user
+control "Payfort" as payfort
+boundary "Frontend" as fe
+control "Middleware" as api
+boundary "Elastic Suite" as es
+boundary "Magento" as m2
+
+==Payfort Place Order==
+
+user -> fe: Order Now
+fe -> api: **POST: **/api/V1/cart/place-order\n{"paymentMethod":{"method":"aps_fort_cc"}}
+api -> m2: **POST: ** \n{"paymentMethod":{"method":"aps_fort_cc"}}
+
+alt#pink Failure from Magento
+	m2 -> api: Failed {message}
+	m2 -> fe: Failed {message}
+	fe ->o user : Failed {message}
+end
+
+m2 -> api: **Success** \n{incrementId, orderId, order:{}}
+api -> m2: **GET:** /V1/alhabib/aps-request-params/{orderId}
+
+alt#pink Failure from Magento
+	m2 -> api: Failed {message}
+	m2 -> fe: Failed {message}
+	fe ->o user : Failed {message}
+end
+
+m2 -> api: **Success** {incrementId, orderId, payfort_param, url, magento_response_url}
+api <-> es: Get ordered item content i.e. Images
+api -> fe: **Success** \n{orderObj, paymentParams, url}
+fe -> payfort: **WebView** hit to given url
+payfort -> fe: **Redirection** to return url
+
+alt#gold #lightblue Order placed **Success**fuly
+	fe ->o user: async **Success** Page
+	fe -> api: async **POST: **/cart/payfort/verify {verify}
+	api -> m2: **GET: ** Magento return URL with verify params
+	m2 -> api: {True}
+	api ->o fe: {True}
+else #pink  Failure from Payfort
+	fe ->o user: async Failed {message}
+	fe -> api: async **POST: **/cart/payfort/verify {verify}
+	api -> m2: **GET: ** Magento return URL with verify params
+	m2 -> api: {False}
+	api -> fe: {False}
+end
+
+@enduml
+
+
+{config.env.url}?target_url=sdfddff"&
